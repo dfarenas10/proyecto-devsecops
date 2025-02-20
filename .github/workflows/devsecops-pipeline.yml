@@ -1,0 +1,16 @@
+name: DevSecOps Pipeline
+on: [push, pull_request]
+
+jobs:
+  security-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+      - name: Run OWASP Dependency Check
+        run: |
+          docker run --rm owasp/dependency-check --scan /github/workspace
+      - name: Run Gitleaks for secret scanning
+        uses: zricethezav/gitleaks-action@v1.6.0
