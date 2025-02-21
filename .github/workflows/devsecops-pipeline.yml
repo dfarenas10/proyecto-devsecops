@@ -3,83 +3,30 @@ name: DevSecOps Pipeline
 on: [push, pull_request]
 
 jobs:
-  security-scan:
+  security-scans:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Instalar dependencias de análisis
+      - name: Install Gitleaks
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
-          pip install semgrep
           curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks-linux-amd64.tar.gz
           tar -xzf gitleaks.tar.gz
-          sudo mv gitleaks /usr/local/bin/
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          sudo chmod +x /usr/local/bin/gitleaks
+          gitleaks version
 
-      # 🔍 Análisis de código con Semgrep
-      - name: Escanear código con Semgrep
+      - name: Run Gitleaks
         run: |
-          semgrep --config "p/r2c-security-audit" --json --output semgrep_report.json || true
+          gitleaks detect --source . --verbose --redact
 
-      - name: Verificar reporte de Semgrep
+      - name: Install Semgrep
         run: |
-          if [ ! -s semgrep_report.json ]; then
-            echo "⚠️ No se encontraron vulnerabilidades en el código o el análisis falló."
-            exit 1
-          fi
+          pip install semgrep
+          semgrep --version
 
-      # 🔎 Detección de secretos con Gitleaks
-      - name: Escanear secretos con Gitleaks
+      - name: Run Semgrep
         run: |
-          gitleaks detect --report-format json --report-path=gitleaks_report.json || true
-
-      - name: Verificar reporte de Gitleaks
-        run: |
-          if [ ! -s gitleaks_report.json ]; then
-            echo "✅ No se encontraron secretos expuestos."
-          else
-            echo "❌ Se encontraron posibles secretos expuestos. Revisa el reporte."
-          fi
-
-      # 📤 Subir resultados a DefectDojo
-      - name: Subir resultados de Semgrep a DefectDojo
-        env:
-          DEFECTDOJO_URL: "https://tu-defectdojo.com"
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
-        run: |
-          curl -k -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
-          -H "Authorization: Token $DEFECTDOJO_API_KEY" \
-          -H "Content-Type: application/json" \
-          -d '{
-            "scan_type": "Semgrep JSON Report",
-            "engagement": 1,
-            "lead": 1,
-            "scan_date": "$(date +%Y-%m-%d)",
-            "minimum_severity": "Low",
-            "active": true,
-            "verified": true,
-            "file": "'"$(base64 semgrep_report.json)"'"
-          }'
-
-      - name: Subir resultados de Gitleaks a DefectDojo
-        env:
-          DEFECTDOJO_URL: "https://tu-defectdojo.com"
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
-        run: |
-          if [ -s gitleaks_report.json ]; then
-            curl -k -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
-            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "scan_type": "Gitleaks JSON Report",
-              "engagement": 1,
-              "lead": 1,
-              "scan_date": "$(date +%Y-%m-%d)",
-              "minimum_severity": "Low",
-              "active": true,
-              "verified": true,
-              "file": "'"$(base64 gitleaks_report.json)"'"
-            }'
-          fi
+          semgrep scan --config=auto .
