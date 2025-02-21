@@ -15,15 +15,24 @@ jobs:
       - name: Run Semgrep
         uses: returntocorp/semgrep-action@v1
 
+      - name: Cache Dependency-Check Database
+        uses: actions/cache@v4
+        with:
+          path: ~/.dependency-check
+          key: dependency-check-db-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            dependency-check-db-${{ runner.os }}-
+
       - name: Update Dependency-Check Database
         run: |
           docker run --rm \
-            -v ${{ github.workspace }}/dependency-check:/usr/share/dependency-check/data \
+            -v ~/.dependency-check:/usr/share/dependency-check/data \
             owasp/dependency-check --updateonly
       
       - name: Run OWASP Dependency Check
         run: |
           docker run --rm \
+            -v ~/.dependency-check:/usr/share/dependency-check/data \
             -v ${{ github.workspace }}:/src \
             -v ${{ github.workspace }}/reports:/reports \
             owasp/dependency-check \
