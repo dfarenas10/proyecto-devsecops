@@ -15,6 +15,9 @@ jobs:
       - name: Run Semgrep
         uses: returntocorp/semgrep-action@v1
 
+      - name: Ensure Dependency-Check Cache Directory Exists
+        run: mkdir -p ~/.dependency-check && chmod -R 777 ~/.dependency-check
+
       - name: Cache Dependency-Check Database
         uses: actions/cache@v4
         with:
@@ -23,6 +26,9 @@ jobs:
           restore-keys: |
             dependency-check-db-${{ runner.os }}-
 
+      - name: Force Update Dependency-Check Database
+        run: rm -rf ~/.dependency-check && mkdir -p ~/.dependency-check
+      
       - name: Update Dependency-Check Database
         run: |
           docker run --rm \
