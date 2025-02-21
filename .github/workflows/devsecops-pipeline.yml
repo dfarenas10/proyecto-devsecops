@@ -64,21 +64,22 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Verificar directorio antes de la ejecución de ZAP
+        run: ls -lah $(pwd)
+
       - name: Run OWASP ZAP Baseline Scan
         run: |
           docker run --rm -v $(pwd):/zap/wrk/:rw \
-            owasp/zap2docker-stable zap-baseline.py -t http://localhost:3000 -r /zap/wrk/zap_report.html || true
+            owasp/zap2docker-stable zap-baseline.py -t http://localhost:3000 -r zap_report.html || true
 
       - name: Convert ZAP report to JSON
         run: |
           docker run --rm -v $(pwd):/zap/wrk/:rw \
-            owasp/zap2docker-stable zap-json-report.py -f /zap/wrk/zap_report.html -o /zap/wrk/zap_report.json || true
+            owasp/zap2docker-stable zap-json-report.py -f zap_report.html -o zap_report.json || true
 
-      - name: List files in working directory (debugging)
-        run: ls -lah $(pwd)
-
-      - name: Check if zap_report.json exists
+      - name: Verificar existencia de zap_report.json
         run: |
+          ls -lah $(pwd)
           if [ ! -f $(pwd)/zap_report.json ]; then
             echo "Error: zap_report.json no se generó correctamente"
             exit 1
@@ -88,7 +89,6 @@ jobs:
         run: |
           curl -X POST "http://$DEFECTDOJO_URL/api/v2/import-scan/" \
             -H "Authorization: Token $DEFECTDOJO_API_TOKEN" \
-            -H "Content-Type: multipart/form-data" \
-            -F "scan_type=ZAP Scan" \
-            -F "engagement=$ENGAGEMENT_ID" \
-            -F "file=@$(pwd)/zap_report.json"
+            --form "scan_type=ZAP Scan" \
+            --form "engagement=$ENGAGEMENT_ID" \
+            --form "file=@zap_report.json"
