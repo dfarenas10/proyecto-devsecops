@@ -23,8 +23,9 @@ jobs:
             owasp/dependency-check \
             --scan /src \
             --format HTML \
-            --out /report
-      
+            --out /report \
+            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+
       - name: Upload Dependency-Check Report
         uses: actions/upload-artifact@v4
         with:
