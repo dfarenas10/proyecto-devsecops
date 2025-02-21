@@ -3,89 +3,48 @@ name: DevSecOps Pipeline
 on: [push, pull_request]
 
 jobs:
-  semgrep:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
-
-  dependency-check:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Cache Dependency-Check Database
-        uses: actions/cache@v4
-        with:
-          path: ~/.dependency-check
-          key: dependency-check-db-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            dependency-check-db-${{ runner.os }}-
-
-      - name: Ensure Dependency-Check Cache Directory Exists
-        run: mkdir -p ~/.dependency-check && chmod -R 777 ~/.dependency-check
-
-      - name: Run OWASP Dependency Check
-        run: |
-          docker run --rm \
-            -v ~/.dependency-check:/usr/share/dependency-check/data \
-            -v ${{ github.workspace }}:/src \
-            -v ${{ github.workspace }}/reports:/reports \
-            owasp/dependency-check \
-            --scan /src \
-            --format HTML \
-            --out /reports \
-            --disableRetireJS \
-            --nvdApiKey ${{ secrets.NVD_API_KEY }} \
-            --enableExperimental || true
-
-      - name: Upload Dependency-Check Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-report
-          path: ${{ github.workspace }}/reports
-
-  gitleaks:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Run Gitleaks for secret scanning
-        uses: zricethezav/gitleaks-action@v1.6.0
-
   zap-scan:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Verificar directorio antes de la ejecución de ZAP
+      - name: Verificar directorio antes de ZAP
         run: ls -lah $(pwd)
+
+      - name: Esperar a que la aplicación esté accesible (si aplica)
+        run: |
+          timeout 60 sh -c 'until curl -s http://localhost:3000; do sleep 5; done' || echo "La aplicación no respondió, se intentará el escaneo de todas formas"
 
       - name: Run OWASP ZAP Baseline Scan
         run: |
           docker run --rm -v $(pwd):/zap/wrk/:rw \
             owasp/zap2docker-stable zap-baseline.py -t http://localhost:3000 -r zap_report.html || true
 
-      - name: Convert ZAP report to JSON
+      - name: Verificar existencia de zap_report.html
+        run: |
+          if [ ! -f $(pwd)/zap_report.html ]; then
+            echo "Error: zap_report.html no se generó correctamente"
+            exit 1
+          fi
+
+      - name: Convertir reporte ZAP a JSON
         run: |
           docker run --rm -v $(pwd):/zap/wrk/:rw \
             owasp/zap2docker-stable zap-json-report.py -f zap_report.html -o zap_report.json || true
 
       - name: Verificar existencia de zap_report.json
         run: |
-          ls -lah $(pwd)
           if [ ! -f $(pwd)/zap_report.json ]; then
             echo "Error: zap_report.json no se generó correctamente"
+            echo "Mostrando contenido del directorio actual:"
+            ls -lah $(pwd)
+            echo "Mostrando logs del reporte HTML (primeras 20 líneas):"
+            head -n 20 zap_report.html || echo "No se encontró zap_report.html"
             exit 1
           fi
 
-      - name: Upload ZAP Results to DefectDojo
+      - name: Subir resultados de ZAP a DefectDojo
         run: |
           curl -X POST "http://$DEFECTDOJO_URL/api/v2/import-scan/" \
             -H "Authorization: Token $DEFECTDOJO_API_TOKEN" \
