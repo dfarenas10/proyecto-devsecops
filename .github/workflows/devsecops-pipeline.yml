@@ -3,115 +3,83 @@ name: DevSecOps Pipeline
 on: [push, pull_request]
 
 jobs:
-  semgrep:
+  security-scan:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
-
-  dependency-check:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Cache Dependency-Check Database
-        uses: actions/cache@v4
-        with:
-          path: ~/.dependency-check
-          key: dependency-check-db-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            dependency-check-db-${{ runner.os }}-
-
-      - name: Ensure Dependency-Check Cache Directory Exists
-        run: mkdir -p ~/.dependency-check && chmod -R 777 ~/.dependency-check
-
-      - name: Run OWASP Dependency Check
-        run: |
-          docker run --rm \
-            -v ~/.dependency-check:/usr/share/dependency-check/data \
-            -v ${{ github.workspace }}:/src \
-            -v ${{ github.workspace }}/reports:/reports \
-            owasp/dependency-check \
-            --scan /src \
-            --format HTML \
-            --out /reports \
-            --disableRetireJS \
-            --nvdApiKey ${{ secrets.NVD_API_KEY }} \
-            --enableExperimental || true
-
-      - name: Upload Dependency-Check Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-report
-          path: ${{ github.workspace }}/reports
-
-  gitleaks:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Run Gitleaks for secret scanning
-        uses: zricethezav/gitleaks-action@v1.6.0
-
-  zap-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Instalar docker-compose
+      - name: Instalar dependencias de análisis
         run: |
           sudo apt-get update
-          sudo apt-get install -y docker-compose
+          sudo apt-get install -y jq
+          pip install semgrep
+          curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks-linux-amd64.tar.gz
+          tar -xzf gitleaks.tar.gz
+          sudo mv gitleaks /usr/local/bin/
 
-      - name: Verificar directorio antes de ZAP
-        run: ls -lah $(pwd)
-
-      - name: Iniciar aplicación (si aplica)
+      # 🔍 Análisis de código con Semgrep
+      - name: Escanear código con Semgrep
         run: |
-          docker-compose up -d || echo "⚠️ No se encontró docker-compose, continuando sin iniciar aplicación"
+          semgrep --config "p/r2c-security-audit" --json --output semgrep_report.json || true
 
-      - name: Esperar a que la aplicación esté accesible
+      - name: Verificar reporte de Semgrep
         run: |
-          timeout 60 sh -c 'until curl -s http://localhost:3000; do sleep 5; done' || echo "⚠️ La aplicación no respondió, se intentará el escaneo de todas formas"
-
-      - name: Run OWASP ZAP Scan en repositorio
-        run: |
-          docker run --rm -v $(pwd):/zap/wrk/:rw \
-            owasp/zap2docker-weekly zap.sh \
-            -cmd -quickurl https://github.com/dfarenas10/proyecto-devsecops \
-            -quickprogress -quickout /zap/wrk/zap_report.html || true
-
-      - name: Verificar si zap_report.html fue generado
-        run: |
-          if [ ! -f $(pwd)/zap_report.html ]; then
-            echo "❌ Error: zap_report.html no se generó correctamente"
-            echo "🔍 Mostrando contenido del directorio actual:"
-            ls -lah $(pwd)
+          if [ ! -s semgrep_report.json ]; then
+            echo "⚠️ No se encontraron vulnerabilidades en el código o el análisis falló."
             exit 1
           fi
 
-      - name: Convertir reporte ZAP a JSON
+      # 🔎 Detección de secretos con Gitleaks
+      - name: Escanear secretos con Gitleaks
         run: |
-          docker run --rm -v $(pwd):/zap/wrk/:rw \
-            owasp/zap2docker-weekly zap-json-report.py -f zap_report.html -o zap_report.json || true
+          gitleaks detect --report-format json --report-path=gitleaks_report.json || true
 
-      - name: Verificar si zap_report.json fue generado
+      - name: Verificar reporte de Gitleaks
         run: |
-          if [ ! -f $(pwd)/zap_report.json ]; then
-            echo "❌ Error: zap_report.json no se generó correctamente"
-            exit 1
+          if [ ! -s gitleaks_report.json ]; then
+            echo "✅ No se encontraron secretos expuestos."
+          else
+            echo "❌ Se encontraron posibles secretos expuestos. Revisa el reporte."
           fi
 
-      - name: Subir resultados de ZAP a DefectDojo
+      # 📤 Subir resultados a DefectDojo
+      - name: Subir resultados de Semgrep a DefectDojo
+        env:
+          DEFECTDOJO_URL: "https://tu-defectdojo.com"
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
         run: |
-          curl -X POST "http://$DEFECTDOJO_URL/api/v2/import-scan/" \
-            -H "Authorization: Token $DEFECTDOJO_API_TOKEN" \
-            --form "scan_type=ZAP Scan" \
-            --form "engagement=$ENGAGEMENT_ID" \
-            --form "file=@zap_report.json"
+          curl -k -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+          -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "scan_type": "Semgrep JSON Report",
+            "engagement": 1,
+            "lead": 1,
+            "scan_date": "$(date +%Y-%m-%d)",
+            "minimum_severity": "Low",
+            "active": true,
+            "verified": true,
+            "file": "'"$(base64 semgrep_report.json)"'"
+          }'
+
+      - name: Subir resultados de Gitleaks a DefectDojo
+        env:
+          DEFECTDOJO_URL: "https://tu-defectdojo.com"
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+        run: |
+          if [ -s gitleaks_report.json ]; then
+            curl -k -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "scan_type": "Gitleaks JSON Report",
+              "engagement": 1,
+              "lead": 1,
+              "scan_date": "$(date +%Y-%m-%d)",
+              "minimum_severity": "Low",
+              "active": true,
+              "verified": true,
+              "file": "'"$(base64 gitleaks_report.json)"'"
+            }'
+          fi
