@@ -10,27 +10,34 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Crear carpeta de salida
-        run: mkdir -p reports
+        run: mkdir -p ${{ github.workspace }}/reports && chmod -R 777 ${{ github.workspace }}/reports
 
       - name: Run Semgrep
         uses: returntocorp/semgrep-action@v1
 
+      - name: Update Dependency-Check Database
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}/dependency-check:/usr/share/dependency-check/data \
+            owasp/dependency-check --updateonly
+      
       - name: Run OWASP Dependency Check
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/src \
-            -v ${{ github.workspace }}/reports:/report \
+            -v ${{ github.workspace }}/reports:/reports \
             owasp/dependency-check \
             --scan /src \
             --format HTML \
-            --out /report \
+            --out /reports \
+            --disableRetireJS \
             --nvdApiKey ${{ secrets.NVD_API_KEY }}
 
       - name: Upload Dependency-Check Report
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
-          path: reports
+          path: ${{ github.workspace }}/reports
       
       - name: Run Gitleaks for secret scanning
         uses: zricethezav/gitleaks-action@v1.6.0
