@@ -64,10 +64,15 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Instalar docker-compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker-compose
+
       - name: Verificar directorio antes de ZAP
         run: ls -lah $(pwd)
 
-      - name: Iniciar la aplicación (si aplica)
+      - name: Iniciar aplicación (si aplica)
         run: |
           docker-compose up -d || echo "⚠️ No se encontró docker-compose, continuando sin iniciar aplicación"
 
@@ -75,11 +80,12 @@ jobs:
         run: |
           timeout 60 sh -c 'until curl -s http://localhost:3000; do sleep 5; done' || echo "⚠️ La aplicación no respondió, se intentará el escaneo de todas formas"
 
-      - name: Run OWASP ZAP Scan
+      - name: Run OWASP ZAP Scan en repositorio
         run: |
           docker run --rm -v $(pwd):/zap/wrk/:rw \
-            owasp/zap2docker-stable zap.sh \
-            -cmd -quickurl http://localhost:3000 -quickprogress -quickout /zap/wrk/zap_report.html || true
+            owasp/zap2docker-weekly zap.sh \
+            -cmd -quickurl https://github.com/dfarenas10/proyecto-devsecops \
+            -quickprogress -quickout /zap/wrk/zap_report.html || true
 
       - name: Verificar si zap_report.html fue generado
         run: |
@@ -87,23 +93,18 @@ jobs:
             echo "❌ Error: zap_report.html no se generó correctamente"
             echo "🔍 Mostrando contenido del directorio actual:"
             ls -lah $(pwd)
-            echo "📄 Mostrando logs del contenedor ZAP:"
-            docker run --rm owasp/zap2docker-stable zap.sh -cmd -quickout /zap/wrk/zap_report.html || true
             exit 1
           fi
 
       - name: Convertir reporte ZAP a JSON
         run: |
           docker run --rm -v $(pwd):/zap/wrk/:rw \
-            owasp/zap2docker-stable zap-json-report.py -f zap_report.html -o zap_report.json || true
+            owasp/zap2docker-weekly zap-json-report.py -f zap_report.html -o zap_report.json || true
 
       - name: Verificar si zap_report.json fue generado
         run: |
           if [ ! -f $(pwd)/zap_report.json ]; then
             echo "❌ Error: zap_report.json no se generó correctamente"
-            ls -lah $(pwd)
-            echo "📄 Mostrando primeras líneas del HTML:"
-            head -n 20 zap_report.html || echo "⚠️ No se encontró zap_report.html"
             exit 1
           fi
 
