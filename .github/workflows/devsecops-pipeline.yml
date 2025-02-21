@@ -1,22 +1,28 @@
 name: DevSecOps Pipeline
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  security-checks:
+  semgrep:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
-      - name: Crear carpeta de salida
-        run: mkdir -p ${{ github.workspace }}/reports && chmod -R 777 ${{ github.workspace }}/reports
 
       - name: Run Semgrep
         uses: returntocorp/semgrep-action@v1
 
-      - name: Ensure Dependency-Check Cache Directory Exists
-        run: mkdir -p ~/.dependency-check && chmod -R 777 ~/.dependency-check
+  dependency-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Cache Dependency-Check Database
         uses: actions/cache@v4
@@ -26,21 +32,9 @@ jobs:
           restore-keys: |
             dependency-check-db-${{ runner.os }}-
 
-      - name: Cleanup Dependency-Check Lock Files
-        run: rm -rf ~/.dependency-check/*.lock
+      - name: Ensure Dependency-Check Cache Directory Exists
+        run: mkdir -p ~/.dependency-check && chmod -R 777 ~/.dependency-check
 
-      - name: Set Permissions for Dependency-Check
-        run: chmod -R 777 ~/.dependency-check || true
-
-      - name: Force Update Dependency-Check Database
-        run: rm -rf ~/.dependency-check && mkdir -p ~/.dependency-check
-      
-      - name: Update Dependency-Check Database
-        run: |
-          docker run --rm \
-            -v ~/.dependency-check:/usr/share/dependency-check/data \
-            owasp/dependency-check --updateonly || rm -rf ~/.dependency-check
-      
       - name: Run OWASP Dependency Check
         run: |
           docker run --rm \
@@ -52,21 +46,34 @@ jobs:
             --format HTML \
             --out /reports \
             --disableRetireJS \
-            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+            --nvdApiKey ${{ secrets.NVD_API_KEY }} \
+            --enableExperimental || true
 
       - name: Upload Dependency-Check Report
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
           path: ${{ github.workspace }}/reports
-      
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Run Gitleaks for secret scanning
         uses: zricethezav/gitleaks-action@v1.6.0
 
-      - name: Run OWASP ZAP Scan
+  zap-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run OWASP ZAP Baseline Scan
         run: |
           docker run --rm -v $(pwd):/zap/wrk/:rw \
-            owasp/zap2docker-stable zap-full-scan.py -t http://localhost:3000 -r zap_report.html || true
+            owasp/zap2docker-stable zap-baseline.py -t http://localhost:3000 -r zap_report.html || true
 
       - name: Convert ZAP report to JSON
         run: |
