@@ -26,6 +26,12 @@ jobs:
           restore-keys: |
             dependency-check-db-${{ runner.os }}-
 
+      - name: Cleanup Dependency-Check Lock Files
+        run: rm -rf ~/.dependency-check/*.lock
+
+      - name: Set Permissions for Dependency-Check
+        run: chmod -R 777 ~/.dependency-check || true
+
       - name: Force Update Dependency-Check Database
         run: rm -rf ~/.dependency-check && mkdir -p ~/.dependency-check
       
@@ -33,7 +39,7 @@ jobs:
         run: |
           docker run --rm \
             -v ~/.dependency-check:/usr/share/dependency-check/data \
-            owasp/dependency-check --updateonly
+            owasp/dependency-check --updateonly || rm -rf ~/.dependency-check
       
       - name: Run OWASP Dependency Check
         run: |
