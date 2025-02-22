@@ -3,34 +3,38 @@ name: DevSecOps Pipeline
 on: [push, pull_request]
 
 jobs:
-  security-scans:
+  gitleaks:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
-      - name: Install Gitleaks
-        run: |
-          curl -sSL -o gitleaks.tar.gz $(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep "browser_download_url" | grep "linux-amd64.tar.gz" | cut -d '"' -f 4)
-          tar -xzf gitleaks.tar.gz gitleaks
-          sudo mv gitleaks /usr/local/bin/gitleaks
-          sudo chmod +x /usr/local/bin/gitleaks
-          gitleaks version
-      
+
       - name: Run Gitleaks
-        run: |
-          gitleaks detect --source . --verbose --redact
-      
+        uses: zricethezav/gitleaks-action@v1.6.0
+        with:
+          config-path: .github/.gitleaks.toml
+
+  semgrep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install Semgrep
         run: |
           pip install semgrep
           semgrep --version
-      
+
       - name: Run Semgrep
         run: |
           semgrep scan --config=auto .
-      
+
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install Trivy
         run: |
           sudo apt-get install -y wget
@@ -38,10 +42,11 @@ jobs:
           tar -xzf trivy_Linux-64bit.tar.gz
           sudo mv trivy /usr/local/bin/
           trivy --version
-      
-      - name: Run Trivy for vulnerabilities
-        run: |
-          trivy filesystem --severity HIGH,CRITICAL --no-progress .
 
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v3
+      - name: Run Trivy filesystem scan
+        run: |
+          trivy fs --scanners vuln,secret --exit-code 1 .
+
+      - name: Run Trivy dependency scan
+        run: |
+          trivy config --exit-code 1 .
