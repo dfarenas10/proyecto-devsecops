@@ -14,16 +14,24 @@ jobs:
         with:
           config-path: .github/.gitleaks.toml
 
+      - name: Check Gitleaks Results
+        id: check_gitleaks
+        run: |
+          if grep -q '"results": \[\]' gitleaks_report.json; then
+            echo "HAS_VULNERABILITIES=false" >> $GITHUB_ENV
+          else
+            echo "HAS_VULNERABILITIES=true" >> $GITHUB_ENV
+
       - name: Display Gitleaks Results
         run: |
-          if [ -f gitleaks_report.json ]; then
+          if [ "$HAS_VULNERABILITIES" == "true" ]; then
             jq -r '(.results[] | "| " + .file + " | " + .rule + " | " + .commit + " |")' gitleaks_report.json | column -t -s '|'
           else
             echo "No vulnerabilities found."
           fi
-
+      
       - name: Upload Gitleaks Report to DefectDojo
-        if: "! grep -q '"results": \[\]' gitleaks_report.json"
+        if: env.HAS_VULNERABILITIES == 'true'
         run: |
           curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
           -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
@@ -45,16 +53,24 @@ jobs:
         run: |
           semgrep scan --config=auto --json > semgrep_report.json
 
+      - name: Check Semgrep Results
+        id: check_semgrep
+        run: |
+          if grep -q '"results": \[\]' semgrep_report.json; then
+            echo "HAS_VULNERABILITIES=false" >> $GITHUB_ENV
+          else
+            echo "HAS_VULNERABILITIES=true" >> $GITHUB_ENV
+
       - name: Display Semgrep Results
         run: |
-          if [ -f semgrep_report.json ]; then
+          if [ "$HAS_VULNERABILITIES" == "true" ]; then
             jq -r '(.results[] | "| " + .path + " | " + .check_id + " | " + .extra.message + " |")' semgrep_report.json | column -t -s '|'
           else
             echo "No vulnerabilities found."
           fi
-
+      
       - name: Upload Semgrep Report to DefectDojo
-        if: "! grep -q '"results": \[\]' semgrep_report.json"
+        if: env.HAS_VULNERABILITIES == 'true'
         run: |
           curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
           -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
@@ -70,7 +86,7 @@ jobs:
       - name: Install Trivy
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget curl
+          sudo apt-get install -y wget curl jq
           TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r .tag_name)
           wget "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_Linux-64bit.tar.gz"
           tar -xzf trivy_Linux-64bit.tar.gz
@@ -81,16 +97,24 @@ jobs:
         run: |
           trivy fs --scanners vuln,secret --format json -o trivy_report.json .
 
+      - name: Check Trivy Results
+        id: check_trivy
+        run: |
+          if grep -q '"Results": \[\]' trivy_report.json; then
+            echo "HAS_VULNERABILITIES=false" >> $GITHUB_ENV
+          else
+            echo "HAS_VULNERABILITIES=true" >> $GITHUB_ENV
+
       - name: Display Trivy Results
         run: |
-          if [ -f trivy_report.json ]; then
+          if [ "$HAS_VULNERABILITIES" == "true" ]; then
             jq -r '(.Results[] | .Vulnerabilities[]? | "| " + .VulnerabilityID + " | " + .PkgName + " | " + .Severity + " |")' trivy_report.json | column -t -s '|'
           else
             echo "No vulnerabilities found."
           fi
-
+      
       - name: Upload Trivy Report to DefectDojo
-        if: "! grep -q '"Results": \[\]' trivy_report.json"
+        if: env.HAS_VULNERABILITIES == 'true'
         run: |
           curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
           -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
