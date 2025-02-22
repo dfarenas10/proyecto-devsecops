@@ -14,16 +14,21 @@ jobs:
         with:
           config-path: .github/.gitleaks.toml
 
-      - name: Check if Gitleaks report exists
+      - name: Display Gitleaks Results
         run: |
-          if [ -f gitleaks_report.json ] && ! grep -q '"results": \[\]' gitleaks_report.json; then
-            curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
-              -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
-              -H "Content-Type: application/json" \
-              -d @gitleaks_report.json
+          if [ -f gitleaks_report.json ]; then
+            jq -r '(.results[] | "| " + .file + " | " + .rule + " | " + .commit + " |")' gitleaks_report.json | column -t -s '|'
           else
-            echo "No vulnerabilities found or report file missing. Skipping upload."
+            echo "No vulnerabilities found."
           fi
+
+      - name: Upload Gitleaks Report to DefectDojo
+        if: "! grep -q '"results": \[\]' gitleaks_report.json"
+        run: |
+          curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
+          -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
+          -H "Content-Type: application/json" \
+          -d @gitleaks_report.json
 
   semgrep:
     runs-on: ubuntu-latest
@@ -39,18 +44,22 @@ jobs:
       - name: Run Semgrep
         run: |
           semgrep scan --config=auto --json > semgrep_report.json
-          cat semgrep_report.json
 
-      - name: Upload Semgrep Report to DefectDojo
+      - name: Display Semgrep Results
         run: |
           if [ -f semgrep_report.json ]; then
-            curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
-              -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
-              -H "Content-Type: application/json" \
-              -d @semgrep_report.json
+            jq -r '(.results[] | "| " + .path + " | " + .check_id + " | " + .extra.message + " |")' semgrep_report.json | column -t -s '|'
           else
-            echo "Semgrep report not found. Skipping upload."
+            echo "No vulnerabilities found."
           fi
+
+      - name: Upload Semgrep Report to DefectDojo
+        if: "! grep -q '"results": \[\]' semgrep_report.json"
+        run: |
+          curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
+          -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
+          -H "Content-Type: application/json" \
+          -d @semgrep_report.json
 
   trivy:
     runs-on: ubuntu-latest
@@ -61,25 +70,29 @@ jobs:
       - name: Install Trivy
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget curl jq
+          sudo apt-get install -y wget curl
           TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r .tag_name)
-          wget "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${TRIVY_VERSION#v}_Linux-64bit.tar.gz"
-          tar -xzf trivy_${TRIVY_VERSION#v}_Linux-64bit.tar.gz
+          wget "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_Linux-64bit.tar.gz"
+          tar -xzf trivy_Linux-64bit.tar.gz
           sudo mv trivy /usr/local/bin/
           trivy --version
 
       - name: Run Trivy filesystem scan
         run: |
           trivy fs --scanners vuln,secret --format json -o trivy_report.json .
-          cat trivy_report.json
 
-      - name: Upload Trivy Report to DefectDojo
+      - name: Display Trivy Results
         run: |
           if [ -f trivy_report.json ]; then
-            curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
-              -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
-              -H "Content-Type: application/json" \
-              -d @trivy_report.json
+            jq -r '(.Results[] | .Vulnerabilities[]? | "| " + .VulnerabilityID + " | " + .PkgName + " | " + .Severity + " |")' trivy_report.json | column -t -s '|'
           else
-            echo "Trivy report not found. Skipping upload."
+            echo "No vulnerabilities found."
           fi
+
+      - name: Upload Trivy Report to DefectDojo
+        if: "! grep -q '"Results": \[\]' trivy_report.json"
+        run: |
+          curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
+          -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
+          -H "Content-Type: application/json" \
+          -d @trivy_report.json
