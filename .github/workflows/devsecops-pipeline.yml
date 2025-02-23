@@ -29,12 +29,12 @@ jobs:
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
           if [ -s gitleaks_report.json ] && [ "$(jq '.results | length' gitleaks_report.json)" -gt 0 ]; then
-            curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
+            curl -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
               -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: multipart/form-data" \
               -F "scan_type=Gitleaks Scan" \
               -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-              -F "product_name=DevSecOps Engagement" \
+              -F "product_name=$DEFECTDOJO_PRODUCT_NAME" \
               -F "file=@gitleaks_report.json"
           else
             echo "No vulnerabilities found or report file missing. Skipping upload."
@@ -70,12 +70,12 @@ jobs:
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
           if [ -s semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
-            curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
+            curl -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
               -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: multipart/form-data" \
               -F "scan_type=Semgrep JSON Report" \
               -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-              -F "product_name=DevSecOps Engagement" \
+              -F "product_name=$DEFECTDOJO_PRODUCT_NAME" \
               -F "file=@semgrep_report.json"
           else
             echo "No vulnerabilities found or report file missing. Skipping upload."
