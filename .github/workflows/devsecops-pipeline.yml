@@ -23,11 +23,13 @@ jobs:
           if [ -s semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
             echo "### Semgrep Vulnerabilities Found:"
             jq -r '.results[] | "| " + (.path // "N/A") + " | " + (.check_id // "N/A") + " | " + (.extra.message // "N/A") + " |"' semgrep_report.json
+            echo "UPLOAD_REPORT=true" >> $GITHUB_ENV
           else
             echo "No vulnerabilities found in Semgrep."
           fi
 
       - name: Upload Semgrep Report to DefectDojo
+        if: env.UPLOAD_REPORT == 'true'
         env:
           DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
@@ -38,8 +40,7 @@ jobs:
             -H "Content-Type: multipart/form-data" \
             -F "scan_type=Semgrep JSON Report" \
             -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-            -F "file=@semgrep_report.json" \
-            -F "close_old_findings=true"
+            -F "file=@semgrep_report.json"
 
   trivy:
     runs-on: ubuntu-latest
@@ -50,10 +51,9 @@ jobs:
       - name: Install Trivy
         run: |
           sudo apt-get install -y wget
-          TRIVY_LATEST_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r '.tag_name' | sed 's/v//')
-          wget "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_LATEST_VERSION}/trivy_${TRIVY_LATEST_VERSION}_Linux-64bit.tar.gz"
-          tar zxvf "trivy_${TRIVY_LATEST_VERSION}_Linux-64bit.tar.gz"
-          sudo mv trivy /usr/local/bin/
+          wget -qO- https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb stable main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update && sudo apt-get install -y trivy
           trivy --version
 
       - name: Run Trivy on Repository
@@ -64,11 +64,13 @@ jobs:
           if [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
             echo "### Trivy Vulnerabilities Found:"
             jq -r '.Results[]?.Vulnerabilities[]? | "| " + (.VulnerabilityID // "N/A") + " | " + (.PkgName // "N/A") + " | " + (.Severity // "N/A") + " |"' trivy_report.json
+            echo "UPLOAD_REPORT=true" >> $GITHUB_ENV
           else
             echo "No vulnerabilities found in Trivy."
           fi
 
       - name: Upload Trivy Report to DefectDojo
+        if: env.UPLOAD_REPORT == 'true'
         env:
           DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
@@ -79,8 +81,7 @@ jobs:
             -H "Content-Type: multipart/form-data" \
             -F "scan_type=Trivy Scan" \
             -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-            -F "file=@trivy_report.json" \
-            -F "close_old_findings=true"
+            -F "file=@trivy_report.json"
 
   gitleaks:
     runs-on: ubuntu-latest
@@ -104,11 +105,13 @@ jobs:
           if [ -s gitleaks_report.json ] && [ "$(jq '.leaks | length' gitleaks_report.json)" -gt 0 ]; then
             echo "### Gitleaks Vulnerabilities Found:"
             jq -r '.leaks[] | "| " + (.file // "N/A") + " | " + (.line // "N/A") + " | " + (.rule // "N/A") + " |"' gitleaks_report.json
+            echo "UPLOAD_REPORT=true" >> $GITHUB_ENV
           else
             echo "No vulnerabilities found in Gitleaks."
           fi
 
       - name: Upload Gitleaks Report to DefectDojo
+        if: env.UPLOAD_REPORT == 'true'
         env:
           DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
@@ -119,5 +122,4 @@ jobs:
             -H "Content-Type: multipart/form-data" \
             -F "scan_type=Gitleaks Scan" \
             -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-            -F "file=@gitleaks_report.json" \
-            -F "close_old_findings=true"
+            -F "file=@gitleaks_report.json"
