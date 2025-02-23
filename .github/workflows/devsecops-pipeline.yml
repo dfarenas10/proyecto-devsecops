@@ -27,6 +27,28 @@ jobs:
             echo "No vulnerabilities found in Semgrep."
           fi
 
+      - name: Delete Previous Semgrep Findings from DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
+        run: |
+          curl -X DELETE "$DEFECTDOJO_URL/api/v2/tests/?engagement=$DEFECTDOJO_ENGAGEMENT_ID&test_type=Semgrep JSON Report" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY"
+
+      - name: Upload Semgrep Report to DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
+        run: |
+          curl -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+            -H "Content-Type: multipart/form-data" \
+            -F "scan_type=Semgrep JSON Report" \
+            -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+            -F "file=@semgrep_report.json"
+
   trivy:
     runs-on: ubuntu-latest
     steps:
@@ -54,6 +76,28 @@ jobs:
             echo "No vulnerabilities found in Trivy."
           fi
 
+      - name: Delete Previous Trivy Findings from DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
+        run: |
+          curl -X DELETE "$DEFECTDOJO_URL/api/v2/tests/?engagement=$DEFECTDOJO_ENGAGEMENT_ID&test_type=Trivy Scan" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY"
+
+      - name: Upload Trivy Report to DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
+        run: |
+          curl -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+            -H "Content-Type: multipart/form-data" \
+            -F "scan_type=Trivy Scan" \
+            -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+            -F "file=@trivy_report.json"
+
   gitleaks:
     runs-on: ubuntu-latest
     steps:
@@ -79,3 +123,25 @@ jobs:
           else
             echo "No vulnerabilities found in Gitleaks."
           fi
+
+      - name: Delete Previous Gitleaks Findings from DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
+        run: |
+          curl -X DELETE "$DEFECTDOJO_URL/api/v2/tests/?engagement=$DEFECTDOJO_ENGAGEMENT_ID&test_type=Gitleaks Scan" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY"
+
+      - name: Upload Gitleaks Report to DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
+        run: |
+          curl -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+            -H "Content-Type: multipart/form-data" \
+            -F "scan_type=Gitleaks Scan" \
+            -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+            -F "file=@gitleaks_report.json"
