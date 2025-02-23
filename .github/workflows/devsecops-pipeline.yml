@@ -27,7 +27,7 @@ jobs:
 
       - name: Upload Gitleaks Report to DefectDojo
         run: |
-          if [ -f gitleaks_report.json ] && ! grep -q '"results": \[\]' gitleaks_report.json; then
+          if [ -f gitleaks_report.json ] && [ "$(jq '.results | length' gitleaks_report.json)" -gt 0 ]; then
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
               -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
               -H "Content-Type: application/json" \
@@ -64,7 +64,7 @@ jobs:
 
       - name: Upload Semgrep Report to DefectDojo
         run: |
-          if [ -f semgrep_report.json ] && ! grep -q '"results": \[\]' semgrep_report.json; then
+          if [ -f semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
               -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
               -H "Content-Type: application/json" \
@@ -91,7 +91,7 @@ jobs:
 
       - name: Run Trivy filesystem scan
         run: |
-          trivy fs --scanners vuln,secret --format json -o trivy_report.json .
+          trivy fs --scanners config,vuln,secret --format json -o trivy_report.json .
 
       - name: Display Trivy Results
         run: |
@@ -106,7 +106,7 @@ jobs:
 
       - name: Upload Trivy Report to DefectDojo
         run: |
-          if [ -f trivy_report.json ] && ! grep -q '"Results": \[\]' trivy_report.json; then
+          if [ -f trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
               -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
               -H "Content-Type: application/json" \
