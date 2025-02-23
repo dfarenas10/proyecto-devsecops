@@ -27,6 +27,18 @@ jobs:
             echo "No vulnerabilities found in Semgrep."
           fi
 
+      - name: Remove old Semgrep reports from DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+        run: |
+          report_ids=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/findings/?test__engagement=$DEFECTDOJO_ENGAGEMENT_ID&test__test_type=Semgrep" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" | jq -r '.results[].id')
+
+          for id in $report_ids; do
+            curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/findings/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
+          done
+
       - name: Upload Semgrep Report to DefectDojo
         env:
           DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
@@ -44,7 +56,7 @@ jobs:
               -F "product_name=$DEFECTDOJO_PRODUCT_NAME" \
               -F "environment=$DEFECTDOJO_ENVIRONMENT" \
               -F "file=@semgrep_report.json")
-            http_code=$(tail -n1 <<< "$response")
+            http_code=$(tail -n1 response_body.txt)
             if [ "$http_code" -ne 201 ]; then
               echo "Error uploading Semgrep report. HTTP Code: $http_code"
               exit 1
@@ -68,17 +80,20 @@ jobs:
           sudo mv trivy /usr/local/bin/
           trivy --version
 
-      - name: Run Trivy on Repository
+      - name: Run Trivy
         run: trivy filesystem --format json --output trivy_report.json . || true
 
-      - name: Display Trivy Results
+      - name: Remove old Trivy reports from DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
         run: |
-          if [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
-            echo "### Trivy Vulnerabilities Found:"
-            jq -r '.Results[]?.Vulnerabilities[]? | "| " + (.VulnerabilityID // "N/A") + " | " + (.PkgName // "N/A") + " | " + (.Severity // "N/A") + " |"' trivy_report.json
-          else
-            echo "No vulnerabilities found in Trivy."
-          fi
+          report_ids=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/findings/?test__engagement=$DEFECTDOJO_ENGAGEMENT_ID&test__test_type=Trivy" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" | jq -r '.results[].id')
+
+          for id in $report_ids; do
+            curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/findings/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
+          done
 
       - name: Upload Trivy Report to DefectDojo
         env:
@@ -97,7 +112,7 @@ jobs:
               -F "product_name=$DEFECTDOJO_PRODUCT_NAME" \
               -F "environment=$DEFECTDOJO_ENVIRONMENT" \
               -F "file=@trivy_report.json")
-            http_code=$(tail -n1 <<< "$response")
+            http_code=$(tail -n1 response_body.txt)
             if [ "$http_code" -ne 201 ]; then
               echo "Error uploading Trivy report. HTTP Code: $http_code"
               exit 1
@@ -123,11 +138,14 @@ jobs:
       - name: Run Gitleaks
         run: gitleaks detect -r gitleaks_report.json --format json || true
 
-      - name: Display Gitleaks Results
+      - name: Remove old Gitleaks reports from DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
         run: |
-          if [ -s gitleaks_report.json ] && [ "$(jq '.leaks | length' gitleaks_report.json)" -gt 0 ]; then
-            echo "### Gitleaks Vulnerabilities Found:"
-            jq -r '.leaks[] | "| " + (.file // "N/A") + " | " + (.line // "N/A") + " | " + (.rule // "N/A") + " |"' gitleaks_report.json
-          else
-            echo "No vulnerabilities found in Gitleaks."
-          fi
+          report_ids=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/findings/?test__engagement=$DEFECTDOJO_ENGAGEMENT_ID&test__test_type=Gitleaks" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" | jq -r '.results[].id')
+
+          for id in $report_ids; do
+            curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/findings/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
+          done
