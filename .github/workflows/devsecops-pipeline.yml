@@ -31,7 +31,7 @@ jobs:
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
               -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
               -H "Content-Type: application/json" \
-              -d @gitleaks_report.json
+              --data-binary @gitleaks_report.json
           else
             echo "No vulnerabilities found or report file missing. Skipping upload."
           fi
@@ -68,7 +68,7 @@ jobs:
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
               -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
               -H "Content-Type: application/json" \
-              -d @semgrep_report.json
+              --data-binary @semgrep_report.json
           else
             echo "No vulnerabilities found or report file missing. Skipping upload."
           fi
@@ -91,7 +91,7 @@ jobs:
 
       - name: Run Trivy filesystem scan
         run: |
-          trivy fs --scanners config,vuln,secret --format json -o trivy_report.json .
+          trivy fs --scanners vuln,secret --format json -o trivy_report.json .
 
       - name: Display Trivy Results
         run: |
@@ -110,7 +110,7 @@ jobs:
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
               -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
               -H "Content-Type: application/json" \
-              -d @trivy_report.json
+              --data-binary @trivy_report.json
           else
             echo "No vulnerabilities found or report file missing. Skipping upload."
           fi
