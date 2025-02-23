@@ -14,12 +14,9 @@ jobs:
         with:
           config-path: .github/.gitleaks.toml
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
-
       - name: Display Gitleaks Results
         run: |
-          if [ -f gitleaks_report.json ] && [ -s gitleaks_report.json ]; then
+          if [ -s gitleaks_report.json ]; then
             echo "### Gitleaks Vulnerabilities Found:"
             jq -r '.results[]? | "| " + (.file // "N/A") + " | " + (.rule // "N/A") + " | " + (.commit // "N/A") + " |"' gitleaks_report.json || echo "No vulnerabilities found."
           else
@@ -31,7 +28,7 @@ jobs:
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
-          if [ -f gitleaks_report.json ] && [ -s gitleaks_report.json ] && [ "$(jq '.results | length' gitleaks_report.json)" -gt 0 ]; then
+          if [ -s gitleaks_report.json ] && [ "$(jq '.results | length' gitleaks_report.json)" -gt 0 ]; then
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
               -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: multipart/form-data" \
@@ -49,12 +46,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Install Semgrep
+      - name: Install Semgrep and jq
         run: |
           pip install semgrep
+          sudo apt-get update && sudo apt-get install -y jq
           semgrep --version
 
       - name: Run Semgrep
@@ -62,7 +57,7 @@ jobs:
 
       - name: Display Semgrep Results
         run: |
-          if [ -f semgrep_report.json ] && [ -s semgrep_report.json ]; then
+          if [ -s semgrep_report.json ]; then
             echo "### Semgrep Vulnerabilities Found:"
             jq -r '.results[]? | "| " + (.path // "N/A") + " | " + (.check_id // "N/A") + " | " + (.extra.message // "N/A") + " |"' semgrep_report.json || echo "No vulnerabilities found."
           else
@@ -74,7 +69,7 @@ jobs:
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
-          if [ -f semgrep_report.json ] && [ -s semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
+          if [ -s semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
               -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: multipart/form-data" \
@@ -82,54 +77,6 @@ jobs:
               -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
               -F "product_name=DevSecOps Engagement" \
               -F "file=@semgrep_report.json"
-          else
-            echo "No vulnerabilities found or report file missing. Skipping upload."
-          fi
-
-  trivy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Install Trivy
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget curl jq
-          TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r .tag_name)
-          wget "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${TRIVY_VERSION#v}_Linux-64bit.tar.gz"
-          tar -xzf trivy_${TRIVY_VERSION#v}_Linux-64bit.tar.gz
-          sudo mv trivy /usr/local/bin/
-          trivy --version
-
-      - name: Run Trivy filesystem scan
-        run: trivy fs --scanners vuln,secret --format json -o trivy_report.json . || true
-
-      - name: Display Trivy Results
-        run: |
-          if [ -f trivy_report.json ] && [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
-            echo "### Trivy Vulnerabilities Found:"
-            jq -r '.Results[]? | select(.Vulnerabilities) | .Vulnerabilities[]? | "| " + (.VulnerabilityID // "N/A") + " | " + (.PkgName // "N/A") + " | " + (.Severity // "N/A") + " |"' trivy_report.json
-          else
-            echo "No vulnerabilities found."
-          fi
-
-      - name: Upload Trivy Report to DefectDojo
-        env:
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
-          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
-        run: |
-          if [ -f trivy_report.json ] && [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
-            curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
-              -H "Authorization: Token $DEFECTDOJO_API_KEY" \
-              -H "Content-Type: multipart/form-data" \
-              -F "scan_type=Trivy Scan" \
-              -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-              -F "product_name=DevSecOps Engagement" \
-              -F "file=@trivy_report.json"
           else
             echo "No vulnerabilities found or report file missing. Skipping upload."
           fi
