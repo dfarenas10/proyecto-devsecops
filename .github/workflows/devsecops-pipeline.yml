@@ -27,27 +27,6 @@ jobs:
             echo "No vulnerabilities found in Semgrep."
           fi
 
-      - name: Check if Semgrep Findings Exist in DefectDojo
-        id: check_semgrep
-        env:
-          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
-          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
-        run: |
-          FINDINGS_COUNT=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/tests/?engagement=$DEFECTDOJO_ENGAGEMENT_ID&test_type=Semgrep JSON Report" \
-            -H "Authorization: Token $DEFECTDOJO_API_KEY" | jq '.count')
-          echo "FINDINGS_COUNT=$FINDINGS_COUNT" >> $GITHUB_ENV
-
-      - name: Delete Previous Semgrep Findings (If Any)
-        if: env.FINDINGS_COUNT != '0'
-        env:
-          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
-          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
-        run: |
-          curl -X DELETE "$DEFECTDOJO_URL/api/v2/tests/?engagement=$DEFECTDOJO_ENGAGEMENT_ID&test_type=Semgrep JSON Report" \
-            -H "Authorization: Token $DEFECTDOJO_API_KEY"
-
       - name: Upload Semgrep Report to DefectDojo
         env:
           DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
@@ -59,5 +38,86 @@ jobs:
             -H "Content-Type: multipart/form-data" \
             -F "scan_type=Semgrep JSON Report" \
             -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-            -F "file=@semgrep_report.json"
+            -F "file=@semgrep_report.json" \
+            -F "close_old_findings=true"
 
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get install -y wget
+          TRIVY_LATEST_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r '.tag_name' | sed 's/v//')
+          wget "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_LATEST_VERSION}/trivy_${TRIVY_LATEST_VERSION}_Linux-64bit.tar.gz"
+          tar zxvf "trivy_${TRIVY_LATEST_VERSION}_Linux-64bit.tar.gz"
+          sudo mv trivy /usr/local/bin/
+          trivy --version
+
+      - name: Run Trivy on Repository
+        run: trivy filesystem --format json --output trivy_report.json . || true
+
+      - name: Display Trivy Results
+        run: |
+          if [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
+            echo "### Trivy Vulnerabilities Found:"
+            jq -r '.Results[]?.Vulnerabilities[]? | "| " + (.VulnerabilityID // "N/A") + " | " + (.PkgName // "N/A") + " | " + (.Severity // "N/A") + " |"' trivy_report.json
+          else
+            echo "No vulnerabilities found in Trivy."
+          fi
+
+      - name: Upload Trivy Report to DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
+        run: |
+          curl -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+            -H "Content-Type: multipart/form-data" \
+            -F "scan_type=Trivy Scan" \
+            -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+            -F "file=@trivy_report.json" \
+            -F "close_old_findings=true"
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Gitleaks
+        run: |
+          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.tag_name')
+          wget -O gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz
+          sudo mv gitleaks /usr/local/bin/
+          gitleaks version
+
+      - name: Run Gitleaks
+        run: gitleaks detect -r gitleaks_report.json --format json || true
+
+      - name: Display Gitleaks Results
+        run: |
+          if [ -s gitleaks_report.json ] && [ "$(jq '.leaks | length' gitleaks_report.json)" -gt 0 ]; then
+            echo "### Gitleaks Vulnerabilities Found:"
+            jq -r '.leaks[] | "| " + (.file // "N/A") + " | " + (.line // "N/A") + " | " + (.rule // "N/A") + " |"' gitleaks_report.json
+          else
+            echo "No vulnerabilities found in Gitleaks."
+          fi
+
+      - name: Upload Gitleaks Report to DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
+        run: |
+          curl -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+            -H "Content-Type: multipart/form-data" \
+            -F "scan_type=Gitleaks Scan" \
+            -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+            -F "file=@gitleaks_report.json" \
+            -F "close_old_findings=true"
