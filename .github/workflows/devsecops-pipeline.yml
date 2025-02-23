@@ -35,7 +35,7 @@ jobs:
           DEFECTDOJO_PRODUCT_NAME: "DevSecOps Engagement"
         run: |
           if [ -s semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
-            response=$(curl -s -w "%{http_code}" -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            response=$(curl -s -o response_body.txt -w "%{http_code}" -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
               -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: multipart/form-data" \
               -F "scan_type=Semgrep JSON Report" \
@@ -43,9 +43,12 @@ jobs:
               -F "product_name=$DEFECTDOJO_PRODUCT_NAME" \
               -F "file=@semgrep_report.json")
 
-            http_code="${response: -3}"
+            http_code=$(tail -n1 <<< "$response")
+            body=$(cat response_body.txt)
+
             if [ "$http_code" -ne 201 ]; then
-              echo "Error uploading Semgrep report. Server response: $response"
+              echo "Error uploading Semgrep report. HTTP Code: $http_code"
+              echo "Response body: $body"
               exit 1
             fi
           else
@@ -70,15 +73,6 @@ jobs:
       - name: Run Trivy on Repository
         run: trivy filesystem --format json --output trivy_report.json . || true
 
-      - name: Display Trivy Results
-        run: |
-          if [ -s trivy_report.json ]; then
-            echo "### Trivy Vulnerabilities Found:"
-            jq -r '.Results[]? | select(.Vulnerabilities) | .Vulnerabilities[]? | "| " + (.VulnerabilityID // "N/A") + " | " + (.PkgName // "N/A") + " | " + (.Severity // "N/A") + " |"' trivy_report.json || echo "No vulnerabilities found."
-          else
-            echo "No vulnerabilities found."
-          fi
-
       - name: Upload Trivy Report to DefectDojo
         env:
           DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
@@ -87,7 +81,7 @@ jobs:
           DEFECTDOJO_PRODUCT_NAME: "DevSecOps Engagement"
         run: |
           if [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
-            response=$(curl -s -w "%{http_code}" -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            response=$(curl -s -o response_body.txt -w "%{http_code}" -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
               -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: multipart/form-data" \
               -F "scan_type=Trivy Scan" \
@@ -95,9 +89,55 @@ jobs:
               -F "product_name=$DEFECTDOJO_PRODUCT_NAME" \
               -F "file=@trivy_report.json")
 
-            http_code="${response: -3}"
+            http_code=$(tail -n1 <<< "$response")
+            body=$(cat response_body.txt)
+
             if [ "$http_code" -ne 201 ]; then
-              echo "Error uploading Trivy report. Server response: $response"
+              echo "Error uploading Trivy report. HTTP Code: $http_code"
+              echo "Response body: $body"
+              exit 1
+            fi
+          else
+            echo "No vulnerabilities found or report file missing. Skipping upload."
+          fi
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Gitleaks
+        run: |
+          wget -qO- https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks-linux-amd64.tar.gz | tar xz
+          sudo mv gitleaks /usr/local/bin/
+          gitleaks version
+
+      - name: Run Gitleaks
+        run: gitleaks detect -r gitleaks_report.json --format json || true
+
+      - name: Upload Gitleaks Report to DefectDojo
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
+          DEFECTDOJO_PRODUCT_NAME: "DevSecOps Engagement"
+        run: |
+          if [ -s gitleaks_report.json ] && [ "$(jq '.leaks | length' gitleaks_report.json)" -gt 0 ]; then
+            response=$(curl -s -o response_body.txt -w "%{http_code}" -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+              -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+              -H "Content-Type: multipart/form-data" \
+              -F "scan_type=Gitleaks Scan" \
+              -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+              -F "product_name=$DEFECTDOJO_PRODUCT_NAME" \
+              -F "file=@gitleaks_report.json")
+
+            http_code=$(tail -n1 <<< "$response")
+            body=$(cat response_body.txt)
+
+            if [ "$http_code" -ne 201 ]; then
+              echo "Error uploading Gitleaks report. HTTP Code: $http_code"
+              echo "Response body: $body"
               exit 1
             fi
           else
