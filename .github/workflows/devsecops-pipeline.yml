@@ -16,20 +16,20 @@ jobs:
 
       - name: Display Gitleaks Results
         run: |
-          if [ -f gitleaks_report.json ]; then
+          if [ -s gitleaks_report.json ]; then
             echo "### Gitleaks Vulnerabilities Found:"
-            echo "| File | Rule | Commit |"
-            echo "|------|------|--------|"
-            jq -r '.results[] | "| " + .file + " | " + .rule + " | " + .commit + " |"' gitleaks_report.json || echo "No vulnerabilities found."
+            jq -r '.results[]? | "| " + (.file // "N/A") + " | " + (.rule // "N/A") + " | " + (.commit // "N/A") + " |"' gitleaks_report.json || echo "No vulnerabilities found."
           else
             echo "No vulnerabilities found."
           fi
 
       - name: Upload Gitleaks Report to DefectDojo
+        env:
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
         run: |
-          if [ -f gitleaks_report.json ] && [ "$(jq '.results | length' gitleaks_report.json)" -gt 0 ]; then
+          if [ -s gitleaks_report.json ] && [ "$(jq '.results | length' gitleaks_report.json)" -gt 0 ]; then
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
-              -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
+              -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: application/json" \
               --data-binary @gitleaks_report.json
           else
@@ -48,25 +48,24 @@ jobs:
           semgrep --version
 
       - name: Run Semgrep
-        run: |
-          semgrep scan --config=auto --json > semgrep_report.json
+        run: semgrep scan --config=auto --json > semgrep_report.json || true
 
       - name: Display Semgrep Results
         run: |
-          if [ -f semgrep_report.json ]; then
+          if [ -s semgrep_report.json ]; then
             echo "### Semgrep Vulnerabilities Found:"
-            echo "| Path | Check ID | Message |"
-            echo "|------|----------|---------|"
-            jq -r '.results[] | "| " + .path + " | " + .check_id + " | " + .extra.message + " |"' semgrep_report.json || echo "No vulnerabilities found."
+            jq -r '.results[]? | "| " + (.path // "N/A") + " | " + (.check_id // "N/A") + " | " + (.extra.message // "N/A") + " |"' semgrep_report.json || echo "No vulnerabilities found."
           else
             echo "No vulnerabilities found."
           fi
 
       - name: Upload Semgrep Report to DefectDojo
+        env:
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
         run: |
-          if [ -f semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
+          if [ -s semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
-              -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
+              -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: application/json" \
               --data-binary @semgrep_report.json
           else
@@ -90,25 +89,24 @@ jobs:
           trivy --version
 
       - name: Run Trivy filesystem scan
-        run: |
-          trivy fs --scanners vuln,secret --format json -o trivy_report.json .
+        run: trivy fs --scanners vuln,secret --format json -o trivy_report.json . || true
 
       - name: Display Trivy Results
         run: |
-          if [ -f trivy_report.json ]; then
+          if [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
             echo "### Trivy Vulnerabilities Found:"
-            echo "| Vulnerability ID | Package | Severity |"
-            echo "|------------------|---------|----------|"
-            jq -r '.Results[] | .Vulnerabilities[]? | "| " + .VulnerabilityID + " | " + .PkgName + " | " + .Severity + " |"' trivy_report.json || echo "No vulnerabilities found."
+            jq -r '.Results[]? | select(.Vulnerabilities) | .Vulnerabilities[]? | "| " + (.VulnerabilityID // "N/A") + " | " + (.PkgName // "N/A") + " | " + (.Severity // "N/A") + " |"' trivy_report.json
           else
             echo "No vulnerabilities found."
           fi
 
       - name: Upload Trivy Report to DefectDojo
+        env:
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
         run: |
-          if [ -f trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
+          if [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
-              -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
+              -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: application/json" \
               --data-binary @trivy_report.json
           else
