@@ -23,25 +23,21 @@ jobs:
             echo "No vulnerabilities found."
           fi
 
-      - name: Debug Secrets
-        run: |
-          echo "API Key Length: ${#DEFECTDOJO_API_KEY}"
-          echo "Engagement ID Length: ${#DEFECTDOJO_ENGAGEMENT_ID}"
-
       - name: Upload Gitleaks Report to DefectDojo
         env:
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
-          if [ -s gitleaks_report.json ] && [ "$(jq '.results | length' gitleaks_report.json)" -gt 0 ]; then
+          if [ -s gitleaks_report.json ] && jq empty gitleaks_report.json >/dev/null 2>&1 && [ "$(jq '.results | length' gitleaks_report.json)" -gt 0 ]; then
+            echo "Uploading Gitleaks report to DefectDojo..."
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
               -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: multipart/form-data" \
-              -F "scan_type=Gitleaks Scan" \
+              -F "scan_type=Gitleaks" \
               -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
               -F "file=@gitleaks_report.json"
           else
-            echo "No vulnerabilities found or report file missing. Skipping upload."
+            echo "No valid vulnerabilities found or report file missing. Skipping upload."
           fi
 
   semgrep:
@@ -72,15 +68,19 @@ jobs:
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
-          if [ -s semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
+          echo "API Key Length: ${#DEFECTDOJO_API_KEY} characters"
+          echo "Engagement ID Length: ${#DEFECTDOJO_ENGAGEMENT_ID} characters"
+
+          if [ -s semgrep_report.json ] && jq empty semgrep_report.json >/dev/null 2>&1 && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
+            echo "Uploading Semgrep report to DefectDojo..."
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
               -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: multipart/form-data" \
-              -F "scan_type=Semgrep JSON Report" \
+              -F "scan_type=Semgrep" \
               -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
               -F "file=@semgrep_report.json"
           else
-            echo "No vulnerabilities found or report file missing. Skipping upload."
+            echo "No valid vulnerabilities found or report file missing. Skipping upload."
           fi
 
   trivy:
@@ -116,7 +116,8 @@ jobs:
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
-          if [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
+          if [ -s trivy_report.json ] && jq empty trivy_report.json >/dev/null 2>&1 && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
+            echo "Uploading Trivy report to DefectDojo..."
             curl -X POST "http://3.136.229.202:8080/api/v2/import-scan/" \
               -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: multipart/form-data" \
@@ -124,5 +125,5 @@ jobs:
               -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
               -F "file=@trivy_report.json"
           else
-            echo "No vulnerabilities found or report file missing. Skipping upload."
+            echo "No valid vulnerabilities found or report file missing. Skipping upload."
           fi
