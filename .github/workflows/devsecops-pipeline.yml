@@ -18,34 +18,13 @@ jobs:
       - name: Run Semgrep
         run: semgrep scan --config=auto --json > semgrep_report.json || true
 
-      - name: Upload Semgrep Report to DefectDojo
-        env:
-          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
-          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
-          DEFECTDOJO_PRODUCT_NAME: "DevSecOps Engagement"
-          DEFECTDOJO_ENVIRONMENT: "CI/CD-Pipeline"
+      - name: Display Semgrep Results
         run: |
           if [ -s semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
-            response=$(curl -s -o response_body.txt -w "%{http_code}" -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
-              -H "Authorization: Token $DEFECTDOJO_API_KEY" \
-              -H "Content-Type: multipart/form-data" \
-              -F "scan_type=Semgrep JSON Report" \
-              -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-              -F "product_name=$DEFECTDOJO_PRODUCT_NAME" \
-              -F "environment=$DEFECTDOJO_ENVIRONMENT" \
-              -F "file=@semgrep_report.json")
-
-            http_code=$(tail -n1 <<< "$response")
-            body=$(cat response_body.txt)
-
-            if [ "$http_code" -ne 201 ]; then
-              echo "Error uploading Semgrep report. HTTP Code: $http_code"
-              echo "Response body: $body"
-              exit 1
-            fi
+            echo "### Semgrep Vulnerabilities Found:"
+            jq -r '.results[] | "| " + (.path // "N/A") + " | " + (.check_id // "N/A") + " | " + (.extra.message // "N/A") + " |"' semgrep_report.json
           else
-            echo "No vulnerabilities found or report file missing. Skipping upload."
+            echo "No vulnerabilities found in Semgrep."
           fi
 
   trivy:
@@ -66,32 +45,35 @@ jobs:
       - name: Run Trivy on Repository
         run: trivy filesystem --format json --output trivy_report.json . || true
 
-      - name: Upload Trivy Report to DefectDojo
-        env:
-          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
-          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
-          DEFECTDOJO_PRODUCT_NAME: "DevSecOps Engagement"
-          DEFECTDOJO_ENVIRONMENT: "CI/CD-Pipeline"
+      - name: Display Trivy Results
         run: |
           if [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
-            response=$(curl -s -o response_body.txt -w "%{http_code}" -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
-              -H "Authorization: Token $DEFECTDOJO_API_KEY" \
-              -H "Content-Type: multipart/form-data" \
-              -F "scan_type=Trivy Scan" \
-              -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-              -F "product_name=$DEFECTDOJO_PRODUCT_NAME" \
-              -F "environment=$DEFECTDOJO_ENVIRONMENT" \
-              -F "file=@trivy_report.json")
-
-            http_code=$(tail -n1 <<< "$response")
-            body=$(cat response_body.txt)
-
-            if [ "$http_code" -ne 201 ]; then
-              echo "Error uploading Trivy report. HTTP Code: $http_code"
-              echo "Response body: $body"
-              exit 1
-            fi
+            echo "### Trivy Vulnerabilities Found:"
+            jq -r '.Results[]?.Vulnerabilities[]? | "| " + (.VulnerabilityID // "N/A") + " | " + (.PkgName // "N/A") + " | " + (.Severity // "N/A") + " |"' trivy_report.json
           else
-            echo "No vulnerabilities found or report file missing. Skipping upload."
+            echo "No vulnerabilities found in Trivy."
+          fi
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Gitleaks
+        run: |
+          wget -qO- https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks-linux-amd64.tar.gz | tar xz
+          sudo mv gitleaks /usr/local/bin/
+          gitleaks version
+
+      - name: Run Gitleaks
+        run: gitleaks detect -r gitleaks_report.json --format json || true
+
+      - name: Display Gitleaks Results
+        run: |
+          if [ -s gitleaks_report.json ] && [ "$(jq '.leaks | length' gitleaks_report.json)" -gt 0 ]; then
+            echo "### Gitleaks Vulnerabilities Found:"
+            jq -r '.leaks[] | "| " + (.file // "N/A") + " | " + (.line // "N/A") + " | " + (.rule // "N/A") + " |"' gitleaks_report.json
+          else
+            echo "No vulnerabilities found in Gitleaks."
           fi
