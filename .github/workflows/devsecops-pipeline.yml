@@ -23,6 +23,11 @@ jobs:
             echo "No vulnerabilities found."
           fi
 
+      - name: Debug Secrets
+        run: |
+          echo "API Key Length: ${#DEFECTDOJO_API_KEY}"
+          echo "Engagement ID Length: ${#DEFECTDOJO_ENGAGEMENT_ID}"
+
       - name: Upload Gitleaks Report to DefectDojo
         env:
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
