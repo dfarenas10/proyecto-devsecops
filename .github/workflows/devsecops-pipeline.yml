@@ -44,6 +44,15 @@ jobs:
             echo "No previous Semgrep reports found in DefectDojo."
           fi
 
+      - name: Upload Semgrep Report to DefectDojo if Vulnerabilities Found
+        if: ${{ success() && (hashFiles('semgrep_report.json') != '') && (jq '.results | length' semgrep_report.json) -gt 0 }}
+        run: |
+          curl -s -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+            -F "scan_type=Semgrep JSON Report" \
+            -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+            -F "file=@semgrep_report.json"
+
   trivy:
     runs-on: ubuntu-latest
     steps:
@@ -71,6 +80,15 @@ jobs:
             echo "No vulnerabilities found in Trivy."
           fi
 
+      - name: Upload Trivy Report to DefectDojo if Vulnerabilities Found
+        if: ${{ success() && (hashFiles('trivy_report.json') != '') && (jq '.Results | length' trivy_report.json) -gt 0 }}
+        run: |
+          curl -s -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+            -F "scan_type=Trivy JSON Report" \
+            -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+            -F "file=@trivy_report.json"
+
   gitleaks:
     runs-on: ubuntu-latest
     steps:
@@ -88,28 +106,11 @@ jobs:
       - name: Run Gitleaks
         run: gitleaks detect -r gitleaks_report.json --format json || true
 
-      - name: Display Gitleaks Results
+      - name: Upload Gitleaks Report to DefectDojo if Vulnerabilities Found
+        if: ${{ success() && (hashFiles('gitleaks_report.json') != '') && (jq '.leaks | length' gitleaks_report.json) -gt 0 }}
         run: |
-          if [ -s gitleaks_report.json ] && [ "$(jq '.leaks | length' gitleaks_report.json)" -gt 0 ]; then
-            echo "### Gitleaks Vulnerabilities Found:"
-            jq -r '.leaks[] | "| " + (.file // "N/A") + " | " + (.line // "N/A") + " | " + (.rule // "N/A") + " |"' gitleaks_report.json
-          else
-            echo "No vulnerabilities found in Gitleaks."
-          fi
-
-      - name: Delete Previous Gitleaks Reports in DefectDojo
-        env:
-          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
-          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
-        run: |
-          response=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/import-scan/?engagement=$DEFECTDOJO_ENGAGEMENT_ID" -H "Authorization: Token $DEFECTDOJO_API_KEY")
-          if echo "$response" | jq -e '.results' >/dev/null 2>&1; then
-            report_ids=$(echo "$response" | jq -r '.results[]? | select(.scan_type=="Gitleaks JSON Report") | .id')
-            for id in $report_ids; do
-              echo "Deleting Gitleaks report with ID: $id"
-              curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
-            done
-          else
-            echo "No previous Gitleaks reports found in DefectDojo."
-          fi
+          curl -s -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+            -F "scan_type=Gitleaks JSON Report" \
+            -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+            -F "file=@gitleaks_report.json"
