@@ -7,10 +7,10 @@ El reto consiste en implementar una solución que permita generar una postura de
 
 ## Create repo in Github **proyecto-devsecops**
 
-![Create Repo](ruta VSCODE con la carpeta de screenshop)
+![Create Repo](img/createRepo.png)
 
 
-## Run Locally
+## Download Locally
 
 Clone the project
 
