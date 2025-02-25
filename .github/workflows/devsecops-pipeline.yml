@@ -20,7 +20,7 @@ jobs:
 
       - name: Display Semgrep Results
         run: |
-          if [ -s semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
+          if [ -s semgrep_report.json ] && [ $(jq '.results | length' semgrep_report.json) -gt 0 ]; then
             echo "### Semgrep Vulnerabilities Found:"
             jq -r '.results[] | "| " + (.path // "N/A") + " | " + (.check_id // "N/A") + " | " + (.extra.message // "N/A") + " |"' semgrep_report.json
           else
@@ -34,24 +34,21 @@ jobs:
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
           response=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/import-scan/?engagement=$DEFECTDOJO_ENGAGEMENT_ID" -H "Authorization: Token $DEFECTDOJO_API_KEY")
-          if echo "$response" | jq -e '.results' >/dev/null 2>&1; then
-            report_ids=$(echo "$response" | jq -r '.results[]? | select(.scan_type=="Semgrep JSON Report") | .id')
-            for id in $report_ids; do
-              echo "Deleting Semgrep report with ID: $id"
-              curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
-            done
-          else
-            echo "No previous Semgrep reports found in DefectDojo."
-          fi
+          report_ids=$(echo "$response" | jq -r '.results[]? | select(.scan_type=="Semgrep JSON Report") | .id')
+          for id in $report_ids; do
+            echo "Deleting Semgrep report with ID: $id"
+            curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
+          done
 
       - name: Upload Semgrep Report to DefectDojo if Vulnerabilities Found
-        if: ${{ success() && (hashFiles('semgrep_report.json') != '') && (jq '.results | length' semgrep_report.json) -gt 0 }}
         run: |
-          curl -s -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
-            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
-            -F "scan_type=Semgrep JSON Report" \
-            -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-            -F "file=@semgrep_report.json"
+          if [ -s semgrep_report.json ] && [ $(jq '.results | length' semgrep_report.json) -gt 0 ]; then
+            curl -s -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+              -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+              -F "scan_type=Semgrep JSON Report" \
+              -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+              -F "file=@semgrep_report.json"
+          fi
 
   trivy:
     runs-on: ubuntu-latest
@@ -71,31 +68,15 @@ jobs:
       - name: Run Trivy on Repository
         run: trivy filesystem --format json --output trivy_report.json . || true
 
-      - name: Delete Previous Trivy Reports in DefectDojo
-        env:
-          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
-          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
-        run: |
-          response=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/import-scan/?engagement=$DEFECTDOJO_ENGAGEMENT_ID" -H "Authorization: Token $DEFECTDOJO_API_KEY")
-          if echo "$response" | jq -e '.results' >/dev/null 2>&1; then
-            report_ids=$(echo "$response" | jq -r '.results[]? | select(.scan_type=="Trivy JSON Report") | .id')
-            for id in $report_ids; do
-              echo "Deleting Trivy report with ID: $id"
-              curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
-            done
-          else
-            echo "No previous Trivy reports found in DefectDojo."
-          fi
-
       - name: Upload Trivy Report to DefectDojo if Vulnerabilities Found
-        if: ${{ success() && (hashFiles('trivy_report.json') != '') && (jq '.Results | length' trivy_report.json) -gt 0 }}
         run: |
-          curl -s -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
-            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
-            -F "scan_type=Trivy JSON Report" \
-            -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-            -F "file=@trivy_report.json"
+          if [ -s trivy_report.json ] && [ $(jq '.Results | length' trivy_report.json) -gt 0 ]; then
+            curl -s -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+              -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+              -F "scan_type=Trivy JSON Report" \
+              -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+              -F "file=@trivy_report.json"
+          fi
 
   gitleaks:
     runs-on: ubuntu-latest
@@ -116,7 +97,7 @@ jobs:
 
       - name: Display Gitleaks Results
         run: |
-          if [ -s gitleaks_report.json ] && [ "$(jq '.leaks | length' gitleaks_report.json)" -gt 0 ]; then
+          if [ -s gitleaks_report.json ] && [ $(jq '.leaks | length' gitleaks_report.json) -gt 0 ]; then
             echo "### Gitleaks Vulnerabilities Found:"
             jq -r '.leaks[] | "| " + (.rule // "N/A") + " | " + (.file // "N/A") + " |"' gitleaks_report.json
           else
@@ -124,10 +105,11 @@ jobs:
           fi
 
       - name: Upload Gitleaks Report to DefectDojo if Vulnerabilities Found
-        if: ${{ success() && (hashFiles('gitleaks_report.json') != '') && (jq '.leaks | length' gitleaks_report.json) -gt 0 }}
         run: |
-          curl -s -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
-            -H "Authorization: Token $DEFECTDOJO_API_KEY" \
-            -F "scan_type=Gitleaks JSON Report" \
-            -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-            -F "file=@gitleaks_report.json"
+          if [ -s gitleaks_report.json ] && [ $(jq '.leaks | length' gitleaks_report.json) -gt 0 ]; then
+            curl -s -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+              -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+              -F "scan_type=Gitleaks JSON Report" \
+              -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+              -F "file=@gitleaks_report.json"
+          fi
