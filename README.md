@@ -349,6 +349,33 @@ jobs:
 
 ![Report](img/defectDojo.png)
 
+#**Summary**
+
+**1. Prácticas de DevSecOps validadas**
+El pipeline está validando las siguientes prácticas de seguridad:
+
+**SAST (Static Application Security Testing):**
+
+- **Semgrep:** Analiza el código fuente en busca de patrones de seguridad y malas prácticas.
+
+- **Gitleaks:** Escanea el repositorio en busca de secretos expuestos (credenciales, tokens, etc.).
+
+**SCA (Software Composition Analysis):**
+
+- **Trivy:** Analiza las dependencias del código en busca de vulnerabilidades conocidas en paquetes de terceros.
+
+**2. ASPM utilizado (Application Security Posture Management)**
+El pipeline está utilizando DefectDojo como ASPM para la gestión centralizada de vulnerabilidades detectadas en los escaneos de seguridad.
+
+**Funcionalidades utilizadas de DefectDojo:**
+- Se integran los reportes de Semgrep, Trivy y Gitleaks.
+- Se eliminan reportes previos antes de subir nuevos.
+- Se organiza la información en el engagement "CI/CD-Pipeline".
+
+**Manejo en DefectDojo:**
+
+Como DefectDojo permite asignar niveles de riesgo a las vulnerabilidades, la estrategia de priorización podría depender de la configuración en DefectDojo y de reglas adicionales que se apliquen manualmente o mediante automatización.
+
 
 ## Authors
 
