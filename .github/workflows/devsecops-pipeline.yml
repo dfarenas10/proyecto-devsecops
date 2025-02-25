@@ -34,10 +34,15 @@ jobs:
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
           response=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/import-scan/?engagement=$DEFECTDOJO_ENGAGEMENT_ID" -H "Authorization: Token $DEFECTDOJO_API_KEY")
-          report_ids=$(echo "$response" | jq -r '.results[]? | select(.scan_type=="Semgrep JSON Report") | .id')
-          for id in $report_ids; do
-            curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
-          done
+          if echo "$response" | jq -e '.results' >/dev/null 2>&1; then
+            report_ids=$(echo "$response" | jq -r '.results[]? | select(.scan_type=="Semgrep JSON Report") | .id')
+            for id in $report_ids; do
+              echo "Deleting Semgrep report with ID: $id"
+              curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
+            done
+          else
+            echo "No previous Semgrep reports found in DefectDojo."
+          fi
 
   trivy:
     runs-on: ubuntu-latest
@@ -73,10 +78,15 @@ jobs:
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
           response=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/import-scan/?engagement=$DEFECTDOJO_ENGAGEMENT_ID" -H "Authorization: Token $DEFECTDOJO_API_KEY")
-          report_ids=$(echo "$response" | jq -r '.results[]? | select(.scan_type=="Trivy JSON Report") | .id')
-          for id in $report_ids; do
-            curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
-          done
+          if echo "$response" | jq -e '.results' >/dev/null 2>&1; then
+            report_ids=$(echo "$response" | jq -r '.results[]? | select(.scan_type=="Trivy JSON Report") | .id')
+            for id in $report_ids; do
+              echo "Deleting Trivy report with ID: $id"
+              curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
+            done
+          else
+            echo "No previous Trivy reports found in DefectDojo."
+          fi
 
   gitleaks:
     runs-on: ubuntu-latest
@@ -111,7 +121,12 @@ jobs:
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
           response=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/import-scan/?engagement=$DEFECTDOJO_ENGAGEMENT_ID" -H "Authorization: Token $DEFECTDOJO_API_KEY")
-          report_ids=$(echo "$response" | jq -r '.results[]? | select(.scan_type=="Gitleaks JSON Report") | .id')
-          for id in $report_ids; do
-            curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
-          done
+          if echo "$response" | jq -e '.results' >/dev/null 2>&1; then
+            report_ids=$(echo "$response" | jq -r '.results[]? | select(.scan_type=="Gitleaks JSON Report") | .id')
+            for id in $report_ids; do
+              echo "Deleting Gitleaks report with ID: $id"
+              curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
+            done
+          else
+            echo "No previous Gitleaks reports found in DefectDojo."
+          fi
