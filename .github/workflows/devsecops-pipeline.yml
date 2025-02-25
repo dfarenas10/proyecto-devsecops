@@ -27,34 +27,30 @@ jobs:
             echo "No vulnerabilities found in Semgrep."
           fi
 
-      - name: Delete previous Semgrep reports in DefectDojo
-        env:
-          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
-        run: |
-          report_id=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/findings/?test__engagement=$DEFECTDOJO_ENGAGEMENT_ID&test__title=Semgrep" \
-            -H "Authorization: Token $DEFECTDOJO_API_KEY" | jq -r '.results[].id')
-          
-          if [ -n "$report_id" ]; then
-            for id in $report_id; do
-              curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/findings/$id/" \
-                -H "Authorization: Token $DEFECTDOJO_API_KEY"
-            done
-          fi
-
       - name: Upload Semgrep Report to DefectDojo
         env:
           DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
+          DEFECTDOJO_PRODUCT_NAME: "DevSecOps Engagement"
+          DEFECTDOJO_ENVIRONMENT: "CI/CD-Pipeline"
         run: |
           if [ -s semgrep_report.json ] && [ "$(jq '.results | length' semgrep_report.json)" -gt 0 ]; then
-            curl -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            response=$(curl -s -o response_body.txt -w "%{http_code}" -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
               -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: multipart/form-data" \
               -F "scan_type=Semgrep JSON Report" \
               -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-              -F "file=@semgrep_report.json"
+              -F "product_name=$DEFECTDOJO_PRODUCT_NAME" \
+              -F "environment=$DEFECTDOJO_ENVIRONMENT" \
+              -F "file=@semgrep_report.json")
+            http_code=$(tail -n1 <<< "$response")
+            if [ "$http_code" -ne 201 ]; then
+              echo "Error uploading Semgrep report. HTTP Code: $http_code"
+              exit 1
+            fi
+          else
+            echo "No vulnerabilities found or report file missing. Skipping upload."
           fi
 
   trivy:
@@ -65,29 +61,23 @@ jobs:
 
       - name: Install Trivy
         run: |
-          sudo apt-get install -y wget
+          sudo apt-get install -y wget jq
           TRIVY_LATEST_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r '.tag_name')
-          wget "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_LATEST_VERSION}/trivy_${TRIVY_LATEST_VERSION}_Linux-64bit.tar.gz"
-          tar zxvf "trivy_${TRIVY_LATEST_VERSION}_Linux-64bit.tar.gz"
+          wget -O trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_LATEST_VERSION}/trivy_${TRIVY_LATEST_VERSION}_Linux-64bit.tar.gz"
+          tar zxvf trivy.tar.gz
           sudo mv trivy /usr/local/bin/
           trivy --version
 
       - name: Run Trivy on Repository
         run: trivy filesystem --format json --output trivy_report.json . || true
 
-      - name: Delete previous Trivy reports in DefectDojo
-        env:
-          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+      - name: Display Trivy Results
         run: |
-          report_id=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/findings/?test__engagement=$DEFECTDOJO_ENGAGEMENT_ID&test__title=Trivy" \
-            -H "Authorization: Token $DEFECTDOJO_API_KEY" | jq -r '.results[].id')
-          
-          if [ -n "$report_id" ]; then
-            for id in $report_id; do
-              curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/findings/$id/" \
-                -H "Authorization: Token $DEFECTDOJO_API_KEY"
-            done
+          if [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
+            echo "### Trivy Vulnerabilities Found:"
+            jq -r '.Results[]?.Vulnerabilities[]? | "| " + (.VulnerabilityID // "N/A") + " | " + (.PkgName // "N/A") + " | " + (.Severity // "N/A") + " |"' trivy_report.json
+          else
+            echo "No vulnerabilities found in Trivy."
           fi
 
       - name: Upload Trivy Report to DefectDojo
@@ -95,14 +85,25 @@ jobs:
           DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
+          DEFECTDOJO_PRODUCT_NAME: "DevSecOps Engagement"
+          DEFECTDOJO_ENVIRONMENT: "CI/CD-Pipeline"
         run: |
           if [ -s trivy_report.json ] && [ "$(jq '.Results | length' trivy_report.json)" -gt 0 ]; then
-            curl -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+            response=$(curl -s -o response_body.txt -w "%{http_code}" -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
               -H "Authorization: Token $DEFECTDOJO_API_KEY" \
               -H "Content-Type: multipart/form-data" \
               -F "scan_type=Trivy Scan" \
               -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-              -F "file=@trivy_report.json"
+              -F "product_name=$DEFECTDOJO_PRODUCT_NAME" \
+              -F "environment=$DEFECTDOJO_ENVIRONMENT" \
+              -F "file=@trivy_report.json")
+            http_code=$(tail -n1 <<< "$response")
+            if [ "$http_code" -ne 201 ]; then
+              echo "Error uploading Trivy report. HTTP Code: $http_code"
+              exit 1
+            fi
+          else
+            echo "No vulnerabilities found or report file missing. Skipping upload."
           fi
 
   gitleaks:
@@ -120,19 +121,13 @@ jobs:
           gitleaks version
 
       - name: Run Gitleaks
-        run: gitleaks detect -r gitleaks_report.json --format json || true
+        run: gitleaks detect -r gitleaks_report.json --report-format=json || true
 
-      - name: Delete previous Gitleaks reports in DefectDojo
-        env:
-          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
-          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+      - name: Display Gitleaks Results
         run: |
-          report_id=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/findings/?test__engagement=$DEFECTDOJO_ENGAGEMENT_ID&test__title=Gitleaks" \
-            -H "Authorization: Token $DEFECTDOJO_API_KEY" | jq -r '.results[].id')
-          
-          if [ -n "$report_id" ]; then
-            for id in $report_id; do
-              curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/findings/$id/" \
-                -H "Authorization: Token $DEFECTDOJO_API_KEY"
-            done
+          if [ -s gitleaks_report.json ] && [ "$(jq '.leaks | length' gitleaks_report.json)" -gt 0 ]; then
+            echo "### Gitleaks Vulnerabilities Found:"
+            jq -r '.leaks[] | "| " + (.file // "N/A") + " | " + (.line // "N/A") + " | " + (.rule // "N/A") + " |"' gitleaks_report.json
+          else
+            echo "No vulnerabilities found in Gitleaks."
           fi
