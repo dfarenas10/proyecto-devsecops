@@ -61,11 +61,10 @@ jobs:
 
       - name: Install Trivy
         run: |
-          sudo apt-get install -y wget jq
-          TRIVY_LATEST_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r '.tag_name')
-          wget -O trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_LATEST_VERSION}/trivy_${TRIVY_LATEST_VERSION}_Linux-64bit.tar.gz"
-          tar zxvf trivy.tar.gz
-          sudo mv trivy /usr/local/bin/
+          sudo apt-get update && sudo apt-get install -y wget jq
+          wget -qO- https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo tee /etc/apt/trusted.gpg.d/trivy.asc
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -cs) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update && sudo apt-get install -y trivy
           trivy --version
 
       - name: Run Trivy on Repository
