@@ -33,11 +33,13 @@ jobs:
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
-          report_ids=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/import-scan/?engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-            -H "Authorization: Token $DEFECTDOJO_API_KEY" | jq -r '.results[] | select(.scan_type=="Semgrep JSON Report") | .id')
-          for id in $report_ids; do
-            curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
-          done
+          response=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/import-scan/?engagement=$DEFECTDOJO_ENGAGEMENT_ID" -H "Authorization: Token $DEFECTDOJO_API_KEY")
+          if echo "$response" | jq -e 'has("results")' >/dev/null; then
+            report_ids=$(echo "$response" | jq -r '.results[] | select(.scan_type=="Semgrep JSON Report") | .id')
+            for id in $report_ids; do
+              curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
+            done
+          fi
 
   trivy:
     runs-on: ubuntu-latest
@@ -98,8 +100,10 @@ jobs:
           DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
         run: |
-          report_ids=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/import-scan/?engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-            -H "Authorization: Token $DEFECTDOJO_API_KEY" | jq -r '.results[] | select(.scan_type=="Gitleaks JSON Report") | .id')
-          for id in $report_ids; do
-            curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
-          done
+          response=$(curl -s -X GET "$DEFECTDOJO_URL/api/v2/import-scan/?engagement=$DEFECTDOJO_ENGAGEMENT_ID" -H "Authorization: Token $DEFECTDOJO_API_KEY")
+          if echo "$response" | jq -e 'has("results")' >/dev/null; then
+            report_ids=$(echo "$response" | jq -r '.results[] | select(.scan_type=="Gitleaks JSON Report") | .id')
+            for id in $report_ids; do
+              curl -s -X DELETE "$DEFECTDOJO_URL/api/v2/import-scan/$id/" -H "Authorization: Token $DEFECTDOJO_API_KEY"
+            done
+          fi
